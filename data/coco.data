@@ -1,8 +1,8 @@
 [name]
-model_name=coco
+model_name=yolofv2-nano
 
 [train-configure]
-epochs=300
+epochs=100
 steps=150,250
 batch_size=128
 subdivisions=1
@@ -10,13 +10,13 @@ learning_rate=0.001
 
 [model-configure]
 pre_weights=None
-classes=80
+classes=1
 width=352
 height=352
 anchor_num=3
-anchors=12.64,19.39, 37.88,51.48, 55.71,138.31, 126.91,78.23, 131.57,214.55, 279.92,258.87
+anchors=31.67,166.38, 46.77,209.52, 63.65,253.63, 83.14,292.26, 105.64,333.59, 138.17,346.51
 
 [data-configure]
-train=/media/qiuqiu/D/coco/train2017.txt
-val=/media/qiuqiu/D/coco/val2017.txt
-names=./data/coco.names
+train=/content/Yolo-FastestV2/dataset/train/train.txt
+val=/content/Yolo-FastestV2/dataset/valid/valid.txt
+names=/content/Yolo-FastestV2/dataset/category.names
