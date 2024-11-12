@@ -3,6 +3,7 @@ import torch
 import numpy as np
 import time
 import utils.utils
+import model.detector
 
 # Define the CSI camera pipeline
 def gstreamer_pipeline(
@@ -23,13 +24,20 @@ def gstreamer_pipeline(
         f"videoconvert ! video/x-raw, format=(string)BGR ! appsink"
     )
 
+cfg = { "width": 352, 
+       "height": 352, 
+       "names": '/data/coco.names',
+       "classes": 1,
+       "anchor_num": 3
+       }
+
 # Load PyTorch model
 model_path = 'path_to_your_model.pth'  # Replace with your model path
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-model = torch.load(model_path, map_location=device)
+model = model.detector.Detector(cfg["classes"], cfg["anchor_num"], True).to(device)
+model.load_state_dict(torch.load(model_path, map_location=device))
 model.eval()
 
-cfg = { "width": 352, "height": 352, "names": '/data/coco.names' }
 LABEL_NAMES = []
 with open(cfg["names"], 'r') as f:
     for line in f.readlines():
