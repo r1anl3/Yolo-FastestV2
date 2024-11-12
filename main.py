@@ -24,100 +24,64 @@ def gstreamer_pipeline(
         f"videoconvert ! video/x-raw, format=(string)BGR ! appsink"
     )
 
-# cfg = { "width": 352, 
-#        "height": 352, 
-#        "names": '/data/coco.names',
-#        "classes": 1,
-#        "anchor_num": 3
-#        }
-cfg = utils.utils.load_datafile('./data/coco.data')
+if __name__ == '__main__':
+    # Load configuration and model
+    cfg = utils.utils.load_datafile('./data/coco.data')
+    model = '/modelzoo/yolofv2-nano-190-epoch-0.953577ap-model.pth'
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    model = model.detector.Detector(cfg["classes"], cfg["anchor_num"], True).to(device)
+    model.load_state_dict(torch.load(opt.weights, map_location=device))
+    model.eval()
 
-# Load PyTorch model
-model_path = 'path_to_your_model.pth'  # Replace with your model path
-device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-model = model.detector.Detector(cfg["classes"], cfg["anchor_num"], True).to(device)
-model.load_state_dict(torch.load(model_path, map_location=device))
-model.eval()
+    # Start CSI camera capture
+    cap = cv2.VideoCapture(gstreamer_pipeline(), cv2.CAP_GSTREAMER)
+    if not cap.isOpened():
+        print("Failed to open CSI camera")
+        exit()
 
-LABEL_NAMES = []
-with open(cfg["names"], 'r') as f:
-    for line in f.readlines():
-        LABEL_NAMES.append(line.strip())
+    LABEL_NAMES = []
+    with open(cfg["names"], 'r') as f:
+        LABEL_NAMES = [line.strip() for line in f.readlines()]
 
-# Open CSI camera
-cap = cv2.VideoCapture(gstreamer_pipeline(), cv2.CAP_GSTREAMER)
-if not cap.isOpened():
-    print("Error: Unable to open camera")
-    exit()
-
-# Initialize the timer
-last_detection_time = time.time()
-
-try:
-    while True:
-        # Capture frame-by-frame
+    while cap.isOpened():
         ret, frame = cap.read()
         if not ret:
-            print("Error: Failed to capture image")
             break
 
-        # Only run detection every 2 seconds
-        current_time = time.time()
-        if current_time - last_detection_time >= 2:
-            last_detection_time = current_time  # Update the last detection time
+        # Resize frame to model input size
+        res_img = cv2.resize(frame, (cfg["width"], cfg["height"]), interpolation=cv2.INTER_LINEAR)
+        img = res_img.reshape(1, cfg["height"], cfg["width"], 3)
+        img = torch.from_numpy(img.transpose(0, 3, 1, 2)).to(device).float() / 255.0
 
-            # Resize and preprocess frame
-            res_img = cv2.resize(frame, (cfg["width"], cfg["height"]), interpolation=cv2.INTER_LINEAR) 
-            img = res_img.reshape(1, cfg["height"], cfg["width"], 3)
-            img = torch.from_numpy(img.transpose(0, 3, 1, 2))
-            img = img.to(device).float() / 255.0
+        # Model inference
+        start = time.perf_counter()
+        preds = model(img)
+        end = time.perf_counter()
+        print(f"Inference time: {(end - start) * 1000:.2f} ms")
 
-            # Perform inference
-            with torch.no_grad():
-                start = time.perf_counter()
-                preds = model(img)
-                end = time.perf_counter()
-                print(f"Forward time: {(end - start) * 1000.0:.2f} ms")
+        # Process predictions
+        output = utils.utils.handel_preds(preds, cfg, device)
+        output_boxes = utils.utils.non_max_suppression(output, conf_thres=0.3, iou_thres=0.4)
 
-                output = utils.utils.handel_preds(preds, cfg, device)
-                output_boxes = utils.utils.non_max_suppression(output, conf_thres=0.3, iou_thres=0.4)
+        h, w, _ = frame.shape
+        scale_h, scale_w = h / cfg["height"], w / cfg["width"]
 
-            # Scaling factors
-            h, w, _ = frame.shape
-            scale_h, scale_w = h / cfg["height"], w / cfg["width"]
+        # Draw bounding boxes
+        for box in output_boxes[0]:
+            box = box.tolist()
+            obj_score = box[4]
+            category = LABEL_NAMES[int(box[5])]
 
-            # Initialize counter
-            person_count = 0
+            x1, y1 = int(box[0] * scale_w), int(box[1] * scale_h)
+            x2, y2 = int(box[2] * scale_w), int(box[3] * scale_h)
 
-            for box in output_boxes[0]:
-                box = box.tolist()
-                obj_score = box[4]
-                category = LABEL_NAMES[int(box[5])]
+            cv2.rectangle(frame, (x1, y1), (x2, y2), (255, 255, 0), 2)
+            cv2.putText(frame, f'{category} {obj_score:.2f}', (x1, y1 - 5), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 0), 2)
 
-                # If category is 'person', count it
-                if category == "person":
-                    person_count += 1
-
-                # Scale bounding box
-                x1, y1 = int(box[0] * scale_w), int(box[1] * scale_h)
-                x2, y2 = int(box[2] * scale_w), int(box[3] * scale_h)
-
-                # Draw bounding box and labels
-                cv2.rectangle(frame, (x1, y1), (x2, y2), (255, 255, 0), 2)
-                cv2.putText(frame, f'{obj_score:.2f}', (x1, y1 - 5), 0, 0.7, (0, 255, 0), 2)    
-                cv2.putText(frame, category, (x1, y1 - 25), 0, 0.7, (0, 255, 0), 2)
-
-            # Display person count on frame
-            cv2.putText(frame, f'Persons: {person_count}', (10, 30), 0, 1, (0, 0, 255), 2)
-
-        # Display result frame
-        cv2.imshow("Person Detection", frame)
-
-        # Exit on pressing 'q'
+        # Display result
+        cv2.imshow("CSI Camera Detection", frame)
         if cv2.waitKey(1) & 0xFF == ord('q'):
             break
 
-finally:
-    # Release resources
     cap.release()
     cv2.destroyAllWindows()
