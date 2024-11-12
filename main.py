@@ -24,12 +24,13 @@ def gstreamer_pipeline(
         f"videoconvert ! video/x-raw, format=(string)BGR ! appsink"
     )
 
-cfg = { "width": 352, 
-       "height": 352, 
-       "names": '/data/coco.names',
-       "classes": 1,
-       "anchor_num": 3
-       }
+# cfg = { "width": 352, 
+#        "height": 352, 
+#        "names": '/data/coco.names',
+#        "classes": 1,
+#        "anchor_num": 3
+#        }
+cfg = utils.utils.load_datafile('./data/coco.data')
 
 # Load PyTorch model
 model_path = 'path_to_your_model.pth'  # Replace with your model path
