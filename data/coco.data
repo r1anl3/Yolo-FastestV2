@@ -19,4 +19,4 @@ anchors=31.67,166.38, 46.77,209.52, 63.65,253.63, 83.14,292.26, 105.64,333.59, 1
 [data-configure]
 train=/content/Yolo-FastestV2/dataset/train/train.txt
 val=/content/Yolo-FastestV2/dataset/valid/valid.txt
-names=/data/coco.names
+names=./data/coco.names
