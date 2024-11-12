@@ -27,10 +27,10 @@ def gstreamer_pipeline(
 if __name__ == '__main__':
     # Load configuration and model
     cfg = utils.utils.load_datafile('./data/coco.data')
-    model = '/modelzoo/yolofv2-nano-190-epoch-0.953577ap-model.pth'
+    model_path = 'modelzoo/coco2017-0.241078ap-model.pth'
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     model = model.detector.Detector(cfg["classes"], cfg["anchor_num"], True).to(device)
-    model.load_state_dict(torch.load(opt.weights, map_location=device))
+    model.load_state_dict(torch.load(model_path, map_location=device))
     model.eval()
 
     # Start CSI camera capture
@@ -65,19 +65,23 @@ if __name__ == '__main__':
 
         h, w, _ = frame.shape
         scale_h, scale_w = h / cfg["height"], w / cfg["width"]
-
+        person_count = 0
         # Draw bounding boxes
         for box in output_boxes[0]:
             box = box.tolist()
             obj_score = box[4]
             category = LABEL_NAMES[int(box[5])]
 
-            x1, y1 = int(box[0] * scale_w), int(box[1] * scale_h)
-            x2, y2 = int(box[2] * scale_w), int(box[3] * scale_h)
+            #if category == 'person' and obj_score > 0.8:
+            if category == 'person':
+                person_count += 1
+                x1, y1 = int(box[0] * scale_w), int(box[1] * scale_h)
+                x2, y2 = int(box[2] * scale_w), int(box[3] * scale_h)
 
-            cv2.rectangle(frame, (x1, y1), (x2, y2), (255, 255, 0), 2)
-            cv2.putText(frame, f'{category} {obj_score:.2f}', (x1, y1 - 5), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 0), 2)
+                cv2.rectangle(frame, (x1, y1), (x2, y2), (255, 255, 0), 2)
+                cv2.putText(frame, f'{category} {obj_score:.2f}', (x1, y1 - 5), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 0), 2)
 
+        cv2.putText(frame, f"Total: {person_count}", (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 255, 0), 2, cv2.LINE_AA)
         # Display result
         cv2.imshow("CSI Camera Detection", frame)
         if cv2.waitKey(1) & 0xFF == ord('q'):
